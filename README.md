@@ -49,7 +49,6 @@ select user_id, token from authentication_tokens where user_id = '<user_id>' and
 Пример ссылки:
 https://pass.example.com/setup/recover/<user_id>/<recovery_token>?case=default
 
-14d4bbab-a2d8-4465-97da-067011e42ba6/
 
 ### Важное примечание
 Очень критично наличие рабочего почтового ящика, потому как Passbolt будет отправлять письма с ссылками для авторизации пользователей.
