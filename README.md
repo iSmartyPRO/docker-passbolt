@@ -49,6 +49,37 @@ select user_id, token from authentication_tokens where user_id = '<user_id>' and
 Пример ссылки:
 https://pass.example.com/setup/recover/<user_id>/<recovery_token>?case=default
 
+# Usefull commands
+
+Get Passbolt version
+```
+docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt version"  -s /bin/sh www-data
+```
+
+Import Server key
+```
+docker exec iPass su -m -c "gpg --home /var/lib/passbolt/.gnupg --import /etc/passbolt/gpg/serverkey_private.asc" -s /bin/sh www-data
+```
+
+Test email
+```
+docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt send_test_email --recipient=Ilias.Aidar@ismarty.pro"
+```
+
+Clear Cache
+```
+docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake cache clear_all" -s /bin/sh www-data
+```
+
+Healthcheck
+```
+docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck" -s /bin/sh www-data
+```
+
+Migrate manually
+```
+docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt migrate"  -s /bin/sh www-data
+```
 
 ### Важное примечание
 Очень критично наличие рабочего почтового ящика, потому как Passbolt будет отправлять письма с ссылками для авторизации пользователей.
