@@ -14,6 +14,12 @@ STATUS_FILE="$BACKUP_DIR/status.log"  # Status file
 DB_DUMP_FILE="dump_$TIMESTAMP.sql"
 DOCKER_VERSION_FILE="$BACKUP_DIR/docker-version.txt"
 
+# Get current directory and build the required paths relative to it
+BASE_DIR=$(pwd)
+GPG_DIR="$BASE_DIR/gpg"
+JWT_DIR="$BASE_DIR/jwt"
+DOCKER_PATH="$BASE_DIR"
+
 # Logging function
 log() {
     local MESSAGE="$1"
@@ -33,9 +39,12 @@ mkdir -p "$BACKUP_DIR/gpg"
 # Start script log
 log "Script started."
 
+# Set MySQL password environment variable to avoid prompting
+export MYSQL_PWD="$DATASOURCES_DEFAULT_PASSWORD"
+
 # Perform database backup using mysqldump
 log "Creating a database backup..."
-mysqldump -h "$DATASOURCES_DEFAULT_HOST" -P "$DATASOURCES_DEFAULT_PORT" -u "$DATASOURCES_DEFAULT_USERNAME" -p"$DATASOURCES_DEFAULT_PASSWORD" "$DATASOURCES_DEFAULT_DATABASE" > "$BACKUP_DIR/$DB_DUMP_FILE"
+mysqldump -h "$DATASOURCES_DEFAULT_HOST" -P "$DATASOURCES_DEFAULT_PORT" -u "$DATASOURCES_DEFAULT_USERNAME" "$DATASOURCES_DEFAULT_DATABASE" > "$BACKUP_DIR/$DB_DUMP_FILE"
 
 # Check if mysqldump was successful
 if [ $? -ne 0 ]; then
