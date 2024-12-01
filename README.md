@@ -27,7 +27,7 @@ docker-compose down
 ## Создание пользователя
 После установки, необходимо создать пользователя:
 ```
-docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt register_user -u Ilias.Aidar@ismarty.pro -f Ilias -l Aidar -r admin" -s /bin/sh www-data
+docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt register_user -u Ilias.Aidar@ismarty.pro -f Ilias -l Aidar -r admin" -s /bin/sh www-data
 ```
 
 ## Если не работает почта... ручной способ
@@ -53,33 +53,38 @@ https://pass.example.com/setup/recover/<user_id>/<recovery_token>?case=default
 
 Get Passbolt version
 ```
-docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt version"  -s /bin/sh www-data
+docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt version"  -s /bin/sh www-data
 ```
 
 Import Server key
 ```
-docker exec iPass su -m -c "gpg --home /var/lib/passbolt/.gnupg --import /etc/passbolt/gpg/serverkey_private.asc" -s /bin/sh www-data
+docker exec pass su -m -c "gpg --home /var/lib/passbolt/.gnupg --import /etc/passbolt/gpg/serverkey_private.asc" -s /bin/sh www-data
 ```
 
 Test email
 ```
-docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt send_test_email --recipient=Ilias.Aidar@ismarty.pro"
+docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt send_test_email --recipient=Ilias.Aidar@ismarty.pro"
 ```
 
 Clear Cache
 ```
-docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake cache clear_all" -s /bin/sh www-data
+docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake cache clear_all" -s /bin/sh www-data
 ```
 
 Healthcheck
 ```
-docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck" -s /bin/sh www-data
+docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck" -s /bin/sh www-data
 ```
 
 Migrate manually
 ```
-docker exec iPass su -m -c "/usr/share/php/passbolt/bin/cake passbolt migrate"  -s /bin/sh www-data
+docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt migrate"  -s /bin/sh www-data
 ```
 
 ### Важное примечание
 Очень критично наличие рабочего почтового ящика, потому как Passbolt будет отправлять письма с ссылками для авторизации пользователей.
+
+
+# Backup Script
+
+More information about backups is writtent in [BACKUP.md](BACKUP.md)

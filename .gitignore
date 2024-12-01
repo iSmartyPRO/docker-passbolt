@@ -1,3 +1,5 @@
 .env
 gpg/
 jwt/
+backups/*.tar.gz
+backups/*.log
