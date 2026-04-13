@@ -20,7 +20,7 @@ help: ## Show this help
 	@echo "Examples:"
 	@echo "  make send-test-email RECIPIENT=you@example.com"
 	@echo "  make register-user ARGS='-u admin@x.com -f Admin -l User -r admin'"
-	@echo "  make recovery-url RECOVERY_EMAIL=user@example.com   (omit RECOVERY_EMAIL for interactive prompts)"
+	@echo "  make recovery-url RECOVERY_EMAIL=user@example.com [RECOVERY_HOST=pass.example.com]"
 	@echo "  make cake CAKE_ARGS=\"passbolt healthcheck --verbose\""
 
 up: ## Start stack (docker compose up -d)
@@ -79,8 +79,14 @@ cake: ## Arbitrary cake command: make cake CAKE_ARGS="passbolt status"
 	@test -n "$(CAKE_ARGS)" || (echo 'Set CAKE_ARGS, e.g. make cake CAKE_ARGS="passbolt healthcheck"' >&2; exit 1)
 	$(COMPOSE) exec -T $(SERVICE) su -m -c "$(CAKE) $(CAKE_ARGS)" -s /bin/sh www-data
 
-recovery-url: ## Recovery URL (script + .env): RECOVERY_EMAIL=... or omit for prompts
-	@if [ -n "$(RECOVERY_EMAIL)" ]; then ./scripts/generate_recovery_url.sh "$(RECOVERY_EMAIL)"; else ./scripts/generate_recovery_url.sh; fi
+recovery-url: ## Recovery URL: optional RECOVERY_HOST= and RECOVERY_EMAIL=, else interactive
+	@if [ -n "$(RECOVERY_EMAIL)" ] && [ -n "$(RECOVERY_HOST)" ]; then \
+		./scripts/generate_recovery_url.sh --host="$(RECOVERY_HOST)" --user="$(RECOVERY_EMAIL)"; \
+	elif [ -n "$(RECOVERY_EMAIL)" ]; then \
+		./scripts/generate_recovery_url.sh "$(RECOVERY_EMAIL)"; \
+	else \
+		./scripts/generate_recovery_url.sh; \
+	fi
 
 list-users: ## List users (id, email, name, role, active) from database
 	./scripts/list_users.sh

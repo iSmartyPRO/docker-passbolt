@@ -1,235 +1,196 @@
 # Passbolt CE (Docker)
 
-Docker-развёртывание **Passbolt Community Edition** — менеджера паролей для команд с общими хранилищами, шифрованием и веб-интерфейсом.
+[![Docker Compose](https://img.shields.io/badge/stack-Docker%20Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Passbolt CE](https://img.shields.io/badge/Passbolt-Community%20Edition-orange)](https://www.passbolt.com/)
+
+Production-ready [Passbolt](https://www.passbolt.com/) Community Edition on Docker Compose: external MySQL/MariaDB, SMTP, GPG/JWT volumes, optional CA trust for health checks behind TLS, backup scripts, and a `Makefile` for common operations.
+
+| Document | Purpose |
+|----------|---------|
+| This file | Quick start, repository layout, `.env` variables, commands |
+| [docs/README.md](docs/README.md) | Documentation and scripts index |
+| [docs/make.md](docs/make.md) | **Make**: targets, variables, prerequisites |
+| [docs/backup.md](docs/backup.md) | Backups, cron, emailing archives |
+| [docs/fix-update.md](docs/fix-update.md) | **Nginx** reverse proxy: setup, example config, troubleshooting |
+| [docs/nginx.passbolt.example.conf](docs/nginx.passbolt.example.conf) | Example nginx `server` / `upstream` for Passbolt |
 
 ---
 
-## Кратко
+## Table of contents
 
-- **Что это:** Passbolt CE в Docker (официальный образ `passbolt/passbolt:latest-ce`).
-- **Нужно:** MariaDB/MySQL, SMTP-сервер для писем, GPG-ключ сервера, сеть Docker (или host).
-- **Запуск:** скопировать `.env.example` → `.env`, заполнить переменные, выполнить `docker compose up -d`.
-
----
-
-## Требования
-
-- Docker и Docker Compose (v2)
-- Доступная БД: MariaDB или MySQL (отдельный контейнер или хост)
-- SMTP-сервер для отправки писем (приглашения, восстановление, уведомления)
-- Внешняя сеть Docker: по умолчанию используется сеть с именем из `DOCKER_NETWORK_NAME` (должна существовать при `external: true`)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Repository layout](#repository-layout)
+- [Configuration (`.env`)](#configuration-env)
+- [Operations: Makefile and Docker](#operations-makefile-and-docker)
+- [Recovery without working email](#recovery-without-working-email)
+- [Backups](#backups)
+- [Security](#security)
+- [Links](#links)
 
 ---
 
-## Структура проекта
+## Requirements
 
-```
-pass/
-├── .env.example      # Пример переменных окружения (скопировать в .env)
-├── .env              # Локальная конфигурация (не коммитить, см. .gitignore)
-├── docker-compose.yaml
-├── scripts/                # Скрипты: backup, send-backup-email, install-cron, generate_recovery_url, entrypoint-wrapper
-├── gpg/              # GPG-ключи (серверный ключ и т.д.)
-├── jwt/              # JWT-ключи
-├── ssl/
-│   └── custom.crt    # Опционально: свой CA-сертификат (или путь в SSL_CA_CERT_PATH)
-├── docs/             # Документация (см. docs/README.md)
-└── README.md
-```
-
-Все чувствительные параметры (БД, почта, URL, сеть) задаются через `.env`; в репозитории лежит только `.env.example`.
+- Docker and Docker Compose v2
+- **MariaDB** or **MySQL** (separate container or host)
+- **SMTP** for invitations, recovery, and notifications
+- External Docker network if `docker-compose.yaml` uses `external: true` (name from `DOCKER_NETWORK_NAME`)
 
 ---
 
-## Инструкция по запуску
-
-### 1. Клонирование и подготовка конфигурации
+## Quick start
 
 ```bash
-cd /path/to/repo/pass
+git clone https://github.com/iSmartyPRO/docker-passbolt.git
+cd docker-passbolt
 cp .env.example .env
 ```
 
-Отредактируйте `.env`: укажите свои значения для БД, почты, URL и (при необходимости) сети и пути к CA-сертификату.
+The directory created by `git clone` matches the repository name; `cd` into that folder if yours differs.
 
-### 2. Каталоги и права (Linux)
+1. Edit `.env` (database, mail, public URL, GPG fingerprint — see [Configuration](#configuration-env)).
+2. Create key directories and ownership:
 
-Создайте каталоги для данных Passbolt и задайте владельца (на хосте обычно `www-data` или ваш пользователь; в контейнере Passbolt может работать от своего пользователя):
+   ```bash
+   mkdir -p gpg jwt
+   sudo chown -R 33:33 gpg jwt
+   ```
 
-```bash
-mkdir -p gpg jwt
-# На Linux, если контейнер использует www-data:
-sudo chown -R 33:33 gpg jwt
+   UID `33` often maps to `www-data` in the image; verify the user inside the container if unsure.
+
+3. Place server GPG material under `gpg/` and set `PASSBOLT_GPG_SERVER_KEY_FINGERPRINT`. Details: [Passbolt docs — GPG](https://www.passbolt.com/docs/configure/gpg).
+
+4. Create the external network (if used):
+
+   ```bash
+   docker network create docker-lan
+   ```
+
+   The name must match `DOCKER_NETWORK_NAME` in `.env`, or run `make network-create` from the repository root.
+
+5. Start the stack:
+
+   ```bash
+   docker compose up -d
+   ```
+
+   Logs: `docker compose logs -f` or `make logs-f`.
+
+6. Register the first user (admin). Use the container name from `DOCKER_CONTAINER_NAME` (default `pass`):
+
+   ```bash
+   docker exec -it pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt register_user -u admin@example.com -f Admin -l User -r admin" -s /bin/sh www-data
+   ```
+
+   Equivalent: `make register-user ARGS='-u admin@example.com -f Admin -l User -r admin'`.
+
+Stop: `docker compose down` or `make down`. This compose file does not define Passbolt data volumes; database data lives on your DB server.
+
+---
+
+## Repository layout
+
+```
+.
+├── .env.example          # Sample variables (copy to .env)
+├── .env                  # Local config (do not commit)
+├── docker-compose.yaml   # passbolt service, external network
+├── Makefile              # Targets: up, healthcheck, backup, recovery-url, …
+├── scripts/
+│   ├── backup.sh
+│   ├── send-backup-email.sh
+│   ├── install-cron.sh
+│   ├── generate_recovery_url.sh
+│   ├── list_users.sh
+│   └── entrypoint-wrapper.sh   # Trust CA at startup (see docs/fix-update.md)
+├── gpg/                  # Server GPG keys
+├── jwt/                  # JWT keys
+├── ssl/
+│   └── custom.crt        # Optional: CA for the container (or path via SSL_CA_CERT_PATH)
+├── backups/              # Backup archives (created by the script)
+└── docs/                 # More documentation → docs/README.md
 ```
 
-*(UID 33 часто соответствует `www-data`. При сомнениях проверьте пользователя внутри контейнера.)*
+---
 
-### 3. GPG-ключ сервера
+## Configuration (`.env`)
 
-Сгенерируйте или импортируйте GPG-ключ сервера Passbolt и положите файлы в `gpg/`. В `.env` укажите отпечаток этого ключа в переменной `PASSBOLT_GPG_SERVER_KEY_FINGERPRINT`. Без корректного ключа и отпечатка приложение не запустится.
+| Variable | Description |
+|----------|-------------|
+| `APP_FULL_BASE_URL`, `PASSBOLT_FULL_BASE_URL` | Public HTTPS URL of the instance |
+| `DOCKER_CONTAINER_NAME` | Container name for `docker exec` (examples in this README) |
+| `DOCKER_HTTP_PORT`, `DOCKER_HTTPS_PORT` | Published ports on the host |
+| `DATASOURCES_DEFAULT_*` | DB host, port, user, password, database name |
+| `EMAIL_DEFAULT_*`, `EMAIL_TRANSPORT_DEFAULT_*` | From address and SMTP |
+| `PASSBOLT_GPG_SERVER_KEY_FINGERPRINT` | Server GPG fingerprint (required) |
+| `DOCKER_NETWORK_NAME` | External Docker network name |
+| `SSL_CA_CERT_PATH` | Host path to a CA file (default `./ssl/custom.crt`), mounted for TLS trust during checks |
+| `PASSBOLT_SSL_FORCE`, `PASSBOLT_TRUST_PROXY`, `PASSBOLT_SECURITY_PROXIES_ACTIVE` | Behind a reverse proxy — see [docs/fix-update.md](docs/fix-update.md) |
 
-**Как получить значение для `PASSBOLT_GPG_SERVER_KEY_FINGERPRINT`:** это не отдельная генерация, а отпечаток уже существующей пары ключей — 40 шестнадцатеричных символов без пробелов (удобно в верхнем регистре, как ожидает Passbolt). Если публичный ключ лежит в `gpg/serverkey.asc`, из корня репозитория выполните:
+**GPG fingerprint** for a public key in `gpg/serverkey.asc`:
 
 ```bash
 gpg --show-keys --with-fingerprint --with-colons gpg/serverkey.asc | grep '^fpr:'
 ```
 
-В выводе будет строка вида `fpr:::::::::XXXXXXXX...XXXXXXXX:` — скопируйте среднюю часть (40 символов `0-9A-F`) в `.env`. Тот же отпечаток должен соответствовать `gpg/serverkey_private.asc`; при необходимости проверьте той же командой по файлу приватного ключа или через `gpg --list-secret-keys --with-fingerprint` после импорта ключа.
+Copy the 40 hex characters from the fingerprint field into `.env`.
 
-Подробности: [официальная документация Passbolt — серверный ключ](https://www.passbolt.com/docs/configure/gpg).
+For SMTP with a self-signed or internal certificate, the sample relaxes TLS verification; in production with a trusted CA, enable verification and set `PASSBOLT_PLUGINS_SMTP_SETTINGS_SECURITY_SSL_CAFILE` if needed (see Passbolt documentation).
 
-### 4. Сеть Docker
+---
 
-Если в `docker-compose.yaml` используется внешняя сеть (`external: true`), создайте её до первого запуска:
+## Operations: Makefile and Docker
 
-```bash
-docker network create docker-lan
-```
+From the repository root (with `.env` filled in), run **`make`** or **`make help`** for a built-in list of targets.
 
-Имя сети должно совпадать с `DOCKER_NETWORK_NAME` в `.env`.
+Full reference (every target, command-line variables such as `RECIPIENT`, `ARGS`, `CAKE_ARGS`, `RECOVERY_EMAIL`, `CMD`): **[docs/make.md](docs/make.md)**.
 
-### 5. Запуск
+Direct `docker compose exec` (Compose service name is `passbolt`; container name comes from `.env`):
 
 ```bash
-docker compose up -d
-```
-
-Проверка логов:
-
-```bash
-docker compose logs -f
-```
-
-### 6. Первый пользователь (администратор)
-
-После успешного старта зарегистрируйте первого пользователя (обычно admin):
-
-```bash
-docker exec -it pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt register_user -u admin@example.com -f Admin -l User -r admin" -s /bin/sh www-data
-```
-
-Далее войдите в веб-интерфейс по `APP_FULL_BASE_URL` (или `PASSBOLT_FULL_BASE_URL`) и завершите настройку по инструкциям в браузере.
-
-### 7. Остановка и удаление
-
-```bash
-docker compose down
-```
-
-Для удаления вместе с томами (осторожно, данные БД не в этом проекте):
-
-```bash
-docker compose down -v
+docker compose exec passbolt su -m -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck" -s /bin/sh www-data
+docker compose exec passbolt su -m -c "/usr/share/php/passbolt/bin/cake passbolt send_test_email --recipient=you@example.com" -s /bin/sh www-data
 ```
 
 ---
 
-## Конфигурация (.env)
+## Recovery without working email
 
-Основные переменные:
+If mail is broken, generate a recovery link with the script (the DB host from `.env` must resolve and be reachable):
 
-| Переменная | Описание |
-|------------|----------|
-| `APP_FULL_BASE_URL` | Публичный URL приложения (например `https://pass.example.com`) |
-| `PASSBOLT_FULL_BASE_URL` | То же значение для Passbolt |
-| `DATASOURCES_DEFAULT_*` | Хост, порт, пользователь, пароль и имя БД |
-| `EMAIL_DEFAULT_FROM`, `EMAIL_TRANSPORT_DEFAULT_*` | От кого и через какой SMTP отправлять письма |
-| `PASSBOLT_GPG_SERVER_KEY_FINGERPRINT` | Отпечаток GPG-ключа сервера |
-| `DOCKER_NETWORK_NAME` | Имя внешней Docker-сети |
-| `SSL_CA_CERT_PATH` | Путь к файлу CA-сертификата (опционально; по умолчанию используется `./ssl/custom.crt`) |
+```bash
+./scripts/generate_recovery_url.sh admin@example.com
+# override public host (https:// added if you omit the scheme):
+./scripts/generate_recovery_url.sh --host=pass.example.com --user=admin@example.com
+```
 
-Для SMTP-серверов с самоподписанным или внутренним сертификатом в примере отключена проверка SSL:
-
-- `PASSBOLT_PLUGINS_SMTP_SETTINGS_SECURITY_SSL_VERIFY_PEER=false`
-- `PASSBOLT_PLUGINS_SMTP_SETTINGS_SECURITY_SSL_ALLOW_SELF_SIGNED=true`
-
-В продакшене с доверенным сертификатом лучше включить проверку и при необходимости задать `PASSBOLT_PLUGINS_SMTP_SETTINGS_SECURITY_SSL_CAFILE`.
+Or use `make recovery-url` (interactive, or `RECOVERY_EMAIL=…`, optional `RECOVERY_HOST=…`). For manual DB steps, see [Passbolt documentation](https://www.passbolt.com/docs) and community resources.
 
 ---
 
-## Полезные команды
+## Backups
 
-Везде ниже контейнер предполагается с именем `pass` (или как задано в `DOCKER_CONTAINER_NAME`).
+Full details on variables, cron, and emailing archives: **[docs/backup.md](docs/backup.md)**.
 
-**Версия Passbolt:**
-
-```bash
-docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt version" -s /bin/sh www-data
-```
-
-**Проверка здоровья:**
-
-```bash
-docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt healthcheck" -s /bin/sh www-data
-```
-
-**Тестовое письмо:**
-
-```bash
-docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt send_test_email --recipient=your@email.com" -s /bin/sh www-data
-```
-
-**Очистка кэша:**
-
-```bash
-docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake cache clear_all" -s /bin/sh www-data
-```
-
-**Импорт серверного GPG-ключа:**
-
-```bash
-docker exec pass su -m -c "gpg --home /var/lib/passbolt/.gnupg --import /etc/passbolt/gpg/serverkey_private.asc" -s /bin/sh www-data
-```
-
-**Миграции БД вручную:**
-
-```bash
-docker exec pass su -m -c "/usr/share/php/passbolt/bin/cake passbolt migrate" -s /bin/sh www-data
-```
+In short: `./scripts/backup.sh` writes an archive under `backups/`; `scripts/install-cron.sh` can install crontab entries.
 
 ---
 
-## Если не работает почта (восстановление доступа)
+## Security
 
-Passbolt отправляет ссылки для входа и восстановления по email. Если почта не настроена или письма не доходят, можно получить ссылку восстановления через скрипт или вручную по БД.
-
-**Через скрипт** (контейнер БД должен быть доступен по имени из `DATASOURCES_DEFAULT_HOST`):
-```bash
-./scripts/generate_recovery_url.sh passboltUrl=pass.example.com username=admin@example.com
-```
-
-**Вручную по БД:**
-1. Подключитесь к БД (например, `mysql -u ... -p -h ... database_name`).
-2. Узнайте `id` пользователя: `SELECT id, username FROM users;`
-3. Получите токен восстановления:
-   ```sql
-   SELECT user_id, token FROM authentication_tokens
-   WHERE user_id = '<user_id>' AND type = 'recover'
-   ORDER BY created DESC LIMIT 1;
-   ```
-4. Соберите ссылку:
-   `https://pass.example.com/setup/recover/<user_id>/<token>?case=default`
-
-Важно: для нормальной работы нужен рабочий SMTP (см. раздел конфигурации и тестовое письмо выше).
+- Do not commit `.env` or secrets; only `.env.example` belongs in the repo.
+- Restrict filesystem permissions on `gpg/`, `jwt/`, and backup files on the host.
+- Use trusted TLS certificates and deliberate SMTP verification settings in production.
 
 ---
 
-## Бэкапы
+## Links
 
-Описание скрипта и процедуры бэкапов см. в [docs/backup.md](docs/backup.md).
+- [Passbolt CE](https://www.passbolt.com/)
+- [Passbolt documentation](https://www.passbolt.com/docs)
+- Documentation index for this repo: [docs/README.md](docs/README.md)
 
----
+Documentation and script improvements are welcome via **Issues** and **Pull requests**.
 
-## Документация
-
-Полный список документов и ссылки — в [docs/README.md](docs/README.md):
-
-- [docs/backup.md](docs/backup.md) — бэкапы, отправка на почту, cron (`backup.sh`, `send-backup-email.sh`, `install-cron.sh`)
-- [docs/fix-update.md](docs/fix-update.md) — исправления при работе за reverse proxy (nginx)
-
----
-
-## Лицензия и документация
-
-- Passbolt CE: [passbolt.com](https://www.passbolt.com/)  
-- Документация: [passbolt.com/docs](https://www.passbolt.com/docs)
+Configuration and helper scripts in this repository are provided as part of the project; **Passbolt CE** itself is licensed by Passbolt SA.

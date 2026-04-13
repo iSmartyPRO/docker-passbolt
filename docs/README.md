@@ -1,42 +1,48 @@
-# Документация Passbolt CE (Docker)
+# Documentation
 
-Оглавление всей документации проекта.
-
----
-
-## Скрипты (`scripts/`)
-
-| Скрипт | Назначение |
-|--------|------------|
-| `backup.sh` | Резервная копия: дамп БД, каталоги gpg/jwt, архив в `backups/` |
-| `send-backup-email.sh` | Отправка последнего бэкапа на почту (адрес в `BACKUP_EMAIL_TO`) |
-| `install-cron.sh` | Добавить в crontab запуск backup (ежедневно) и send-backup-email (еженедельно) |
-| `generate_recovery_url.sh` | Получить ссылку восстановления доступа по email пользователя |
-| `entrypoint-wrapper.sh` | Обёртка entrypoint контейнера (добавление CA-сертификата для healthcheck) |
-
-Перед использованием: `chmod +x scripts/*.sh`.
+Central index: jump to detailed topics or the root [README](../README.md).
 
 ---
 
-## Основные материалы
+## Where to start
 
-| Документ | Описание |
-|----------|----------|
-| [**README проекта**](../README.md) | Краткое описание, требования, инструкция по запуску, конфигурация `.env`, полезные команды, восстановление доступа |
-
----
-
-## Дополнительная документация
-
-| Документ | Описание |
-|----------|----------|
-| [**backup.md**](backup.md) | Скрипт бэкапов: настройка, переменные окружения, cron, отправка на почту, политика хранения |
-| [**fix-update.md**](fix-update.md) | Исправления при работе за reverse proxy (nginx): healthcheck, YAML, ERR_TOO_MANY_REDIRECTS |
+1. [Project README](../README.md) — requirements, getting started, `.env`, and pointers to everything else.
+2. **Make** shortcuts (`make help`, backups, Cake, etc.) — [make.md](make.md).
+3. **Nginx** reverse proxy — [fix-update.md](fix-update.md) and example config [nginx.passbolt.example.conf](nginx.passbolt.example.conf).
+4. **Backups** and emailing archives — [backup.md](backup.md).
 
 ---
 
-## Внешние ссылки
+## Scripts (`scripts/`)
+
+Paths are relative to the **repository root**. Before first use: `chmod +x scripts/*.sh`.
+
+| Script | Purpose |
+|--------|---------|
+| [backup.sh](../scripts/backup.sh) | DB dump, copies of `gpg/`, `jwt/`, `.env`, `docker-compose.yaml`; archive under `backups/` |
+| [send-backup-email.sh](../scripts/send-backup-email.sh) | Email the **latest** `.tar.gz` in `backups/` to `BACKUP_EMAIL_TO` |
+| [install-cron.sh](../scripts/install-cron.sh) | Append crontab lines for backup and send-backup-email |
+| [generate_recovery_url.sh](../scripts/generate_recovery_url.sh) | Recovery link from username and `.env` |
+| [list_users.sh](../scripts/list_users.sh) | List users from the database (id, email, name, role, active) |
+| [entrypoint-wrapper.sh](../scripts/entrypoint-wrapper.sh) | Before Passbolt starts: `update-ca-certificates` when a CA is mounted (see [fix-update.md](fix-update.md)) |
+
+Makefile equivalents (from repo root): see **[make.md](make.md)** or run `make help`.
+
+---
+
+## Documents in `docs/`
+
+| File | Contents |
+|------|----------|
+| [make.md](make.md) | Using **Make**: prerequisites, `make help`, all targets, `RECIPIENT` / `ARGS` / `CMD` / … |
+| [backup.md](backup.md) | Requirements, `.env` variables, backup flow, cron, logs, retention |
+| [fix-update.md](fix-update.md) | Nginx reverse proxy (setup, headers, `.env`), troubleshooting |
+| [nginx.passbolt.example.conf](nginx.passbolt.example.conf) | **Example** `server` / `upstream` for TLS termination and proxy to Passbolt |
+
+---
+
+## External resources
 
 - [Passbolt CE](https://www.passbolt.com/)
-- [Документация Passbolt](https://www.passbolt.com/docs)
-- [Настройка GPG-ключа сервера](https://www.passbolt.com/docs/configure/gpg)
+- [Passbolt documentation](https://www.passbolt.com/docs)
+- [Server GPG key setup](https://www.passbolt.com/docs/configure/gpg)

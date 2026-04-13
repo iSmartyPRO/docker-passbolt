@@ -17,48 +17,93 @@ set +a
 
 usage() {
     echo "Usage:"
-    echo "  $0 <username>              — base URL from APP_FULL_BASE_URL in .env"
-    echo "  $0                        — interactive prompts (username; asks for URL if APP_FULL_BASE_URL is empty)"
-    echo "  $0 passboltUrl=<host> username=<email>  — override host (https:// added if omitted)"
+    echo "  $0 <email>                    — base URL from APP_FULL_BASE_URL / PASSBOLT_FULL_BASE_URL in .env"
+    echo "  $0 --host=<host> --user=<email>   — override public host (https:// added if scheme omitted)"
+    echo "  $0 --host <host> --user <email>   — same as above"
+    echo "  $0                            — interactive (username; asks for URL if base URL missing in .env)"
+    echo ""
+    echo "Legacy (still supported):"
+    echo "  $0 passboltUrl=<host> username=<email>"
     exit 1
 }
 
 passbolt_host_override=""
 username=""
+positional=()
 
 if [ $# -eq 0 ]; then
     if [ -z "${APP_FULL_BASE_URL:-}" ] && [ -z "${PASSBOLT_FULL_BASE_URL:-}" ]; then
         read -r -p "Base URL (e.g. https://pass.example.com): " APP_FULL_BASE_URL
     fi
     read -r -p "Username (email): " username
-elif [ $# -eq 1 ]; then
-    username="$1"
-elif [ $# -eq 2 ]; then
-    for arg in "$@"; do
-        case $arg in
+else
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --host=*)
+                passbolt_host_override="${1#*=}"
+                shift
+                ;;
+            --host)
+                if [ -z "${2:-}" ]; then
+                    echo "Error: --host requires a value."
+                    usage
+                fi
+                passbolt_host_override="$2"
+                shift 2
+                ;;
+            --user=*)
+                username="${1#*=}"
+                shift
+                ;;
+            --user)
+                if [ -z "${2:-}" ]; then
+                    echo "Error: --user requires a value."
+                    usage
+                fi
+                username="$2"
+                shift 2
+                ;;
             passboltUrl=*)
-                passbolt_host_override="${arg#*=}"
+                passbolt_host_override="${1#*=}"
+                shift
                 ;;
             username=*)
-                username="${arg#*=}"
+                username="${1#*=}"
+                shift
+                ;;
+            -h|--help)
+                usage
+                ;;
+            -*)
+                echo "Unknown option: $1"
+                usage
                 ;;
             *)
-                echo "Invalid argument: $arg"
-                usage
+                positional+=("$1")
+                shift
                 ;;
         esac
     done
-else
-    echo "Too many arguments."
-    usage
+
+    if [ "${#positional[@]}" -gt 1 ]; then
+        echo "Error: at most one positional argument (email) is allowed."
+        usage
+    fi
+    if [ "${#positional[@]}" -eq 1 ] && [ -n "$username" ]; then
+        echo "Error: use either --user=... or one positional email, not both."
+        usage
+    fi
+    if [ "${#positional[@]}" -eq 1 ]; then
+        username="${positional[0]}"
+    fi
 fi
 
 if [ -z "$username" ]; then
-    echo "Error: username is required."
+    echo "Error: username (email) is required."
     exit 1
 fi
 
-# Recovery link base: APP_FULL_BASE_URL from .env or legacy passboltUrl (hostname only)
+# Recovery link base: .env or --host / passboltUrl (hostname only)
 if [ -n "$passbolt_host_override" ]; then
     h="${passbolt_host_override#https://}"
     h="${h#http://}"
@@ -67,7 +112,7 @@ if [ -n "$passbolt_host_override" ]; then
 else
     base="${APP_FULL_BASE_URL:-${PASSBOLT_FULL_BASE_URL:-}}"
     if [ -z "$base" ]; then
-        echo "Error: set APP_FULL_BASE_URL in .env or use passboltUrl=..."
+        echo "Error: set APP_FULL_BASE_URL in .env or use --host=..."
         exit 1
     fi
     recovery_base="${base%/}"
