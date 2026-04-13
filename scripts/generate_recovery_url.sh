@@ -128,18 +128,38 @@ done
 export MYSQL_PWD="$DATASOURCES_DEFAULT_PASSWORD"
 trap 'unset MYSQL_PWD' EXIT
 
-user_id=$(docker exec -i -e MYSQL_PWD="$DATASOURCES_DEFAULT_PASSWORD" "$DATASOURCES_DEFAULT_HOST" mysql \
-    -u"$DATASOURCES_DEFAULT_USERNAME" \
-    "$DATASOURCES_DEFAULT_DATABASE" -N -e "SELECT id FROM users WHERE username = '$username';" 2>/dev/null | awk '{print $1}')
+DB_CONTAINER=""
+if [ -n "${BACKUP_DB_CONTAINER:-}" ]; then
+    DB_CONTAINER="$BACKUP_DB_CONTAINER"
+elif command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DATASOURCES_DEFAULT_HOST"; then
+    DB_CONTAINER="$DATASOURCES_DEFAULT_HOST"
+fi
+
+run_mysql() {
+    if [ -n "$DB_CONTAINER" ]; then
+        docker exec -i -e MYSQL_PWD="$DATASOURCES_DEFAULT_PASSWORD" "$DB_CONTAINER" mysql \
+            -h 127.0.0.1 -P "${DATASOURCES_DEFAULT_PORT:-3306}" \
+            -u"$DATASOURCES_DEFAULT_USERNAME" \
+            "$DATASOURCES_DEFAULT_DATABASE" "$@"
+    else
+        if ! command -v mysql >/dev/null 2>&1; then
+            echo "Error: mysql client not found. Install mariadb-client (or mysql-client), or set BACKUP_DB_CONTAINER in .env for docker exec."
+            exit 1
+        fi
+        mysql -h "$DATASOURCES_DEFAULT_HOST" -P "${DATASOURCES_DEFAULT_PORT:-3306}" \
+            -u"$DATASOURCES_DEFAULT_USERNAME" \
+            "$DATASOURCES_DEFAULT_DATABASE" "$@"
+    fi
+}
+
+user_id=$(run_mysql -N -e "SELECT id FROM users WHERE username = '$username';" 2>/dev/null | awk '{print $1}')
 
 if [ -z "$user_id" ]; then
     echo "User not found: $username"
     exit 1
 fi
 
-token=$(docker exec -i -e MYSQL_PWD="$DATASOURCES_DEFAULT_PASSWORD" "$DATASOURCES_DEFAULT_HOST" mysql \
-    -u"$DATASOURCES_DEFAULT_USERNAME" \
-    "$DATASOURCES_DEFAULT_DATABASE" -N -e "SELECT token FROM authentication_tokens WHERE user_id = '$user_id' AND type = 'recover' ORDER BY created DESC LIMIT 1;" 2>/dev/null | awk '{print $1}')
+token=$(run_mysql -N -e "SELECT token FROM authentication_tokens WHERE user_id = '$user_id' AND type = 'recover' ORDER BY created DESC LIMIT 1;" 2>/dev/null | awk '{print $1}')
 
 if [ -z "$token" ]; then
     echo "No recovery token found for user ID: $user_id. Request recovery from the login page first."
