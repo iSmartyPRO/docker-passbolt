@@ -1,26 +1,27 @@
 #!/bin/bash
 set -e
 
-# Переход в корень проекта (родитель scripts/) — скрипт можно вызывать из любой директории
+# Run from project root (script cd's here; can be invoked from any directory)
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 cd "$PROJECT_ROOT"
 
-# Загрузка переменных из .env
+# Load variables from .env
 if [ ! -f ".env" ]; then
     echo "Error: .env not found in $PROJECT_ROOT"
     exit 1
 fi
 set -a
+# shellcheck disable=SC1091
 source .env
 set +a
 
-# Пути (значения из .env переопределяют по умолчанию)
+# Paths (.env overrides defaults)
 GPG_DIR="${GPG_DIR:-$PROJECT_ROOT/gpg}"
 JWT_DIR="${JWT_DIR:-$PROJECT_ROOT/jwt}"
 BACKUP_DAYS="${BACKUP_DAYS:-7}"
 
-# Проверка обязательных переменных БД
+# Required database variables
 for var in DATASOURCES_DEFAULT_HOST DATASOURCES_DEFAULT_USERNAME DATASOURCES_DEFAULT_PASSWORD DATASOURCES_DEFAULT_DATABASE; do
     if [ -z "${!var}" ]; then
         echo "Error: $var is not set in .env"
@@ -54,7 +55,7 @@ log "Script started (project root: $PROJECT_ROOT)."
 export MYSQL_PWD="$DATASOURCES_DEFAULT_PASSWORD"
 trap 'unset MYSQL_PWD' EXIT
 
-# Выбор способа дампа: через docker exec, если хост БД — имя контейнера (или задан BACKUP_DB_CONTAINER)
+# Dump via docker exec if DB host matches a running container name (or BACKUP_DB_CONTAINER is set)
 DB_CONTAINER=""
 if [ -n "${BACKUP_DB_CONTAINER:-}" ]; then
     DB_CONTAINER="$BACKUP_DB_CONTAINER"
@@ -83,7 +84,7 @@ else
     fi
 fi
 
-# Копирование gpg и jwt (включая скрытые файлы; пустые каталоги остаются пустыми)
+# Copy gpg and jwt (including dotfiles; empty dirs stay empty)
 log "Copying gpg and jwt folders..."
 for src_dir in "$GPG_DIR" "$JWT_DIR"; do
     dir_name=$(basename "$src_dir")
@@ -92,7 +93,7 @@ for src_dir in "$GPG_DIR" "$JWT_DIR"; do
     fi
 done
 
-# Проверка наличия .env и docker-compose.yaml
+# Require .env and docker-compose.yaml
 for f in .env docker-compose.yaml; do
     if [ ! -f "$PROJECT_ROOT/$f" ]; then
         log "Error: $f not found in $PROJECT_ROOT"
@@ -101,14 +102,14 @@ for f in .env docker-compose.yaml; do
     fi
 done
 
-# Версия Docker
+# Docker version
 log "Getting Docker version..."
 if ! docker -v > "$DOCKER_VERSION_FILE" 2>/dev/null; then
     log "Warning: Could not get Docker version (docker not in PATH?). Writing 'unknown'."
     echo "unknown" > "$DOCKER_VERSION_FILE"
 fi
 
-# Создание архива
+# Create archive
 log "Archiving data..."
 if ! tar -czf "$ARCHIVE_FILE" \
     -C "$BACKUP_DIR" gpg jwt "$DB_DUMP_FILE" docker-version.txt \
@@ -120,11 +121,11 @@ fi
 
 log "Backup created: $ARCHIVE_FILE"
 
-# Удаление временных файлов
+# Remove temporary files
 log "Removing temporary files..."
 rm -rf "$BACKUP_DIR/gpg" "$BACKUP_DIR/jwt" "$BACKUP_DIR/$DB_DUMP_FILE" "$DOCKER_VERSION_FILE"
 
-# Удаление старых бэкапов
+# Prune old backups
 if [ -n "$BACKUP_DAYS" ] && [ "$BACKUP_DAYS" -gt 0 ] 2>/dev/null; then
     log "Removing backups older than $BACKUP_DAYS days..."
     find "$BACKUP_DIR" -maxdepth 1 -type f -name "*.tar.gz" -mtime +"$BACKUP_DAYS" -delete

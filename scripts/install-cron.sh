@@ -1,6 +1,6 @@
 #!/bin/bash
-# Добавляет в crontab задачи: backup.sh (ежедневно ночью) и send-backup-email.sh (раз в неделю ночью).
-# Расписание можно задать в .env или аргументами командной строки.
+# Installs crontab jobs: backup.sh (nightly) and send-backup-email.sh (weekly).
+# Schedules can be set in .env or via command-line arguments.
 
 set -e
 
@@ -8,19 +8,20 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 cd "$PROJECT_ROOT"
 
-# Загрузка .env для переопределения расписания (опционально)
+# Load .env to override schedules (optional)
 if [ -f ".env" ]; then
     set -a
+    # shellcheck disable=SC1091
     source .env
     set +a
 fi
 
-# Расписание по умолчанию: ночью (backup — каждый день 02:00, email — воскресенье 03:00)
-# Формат cron: минута час день_месяца месяц день_недели (0-7 = вс-сб)
+# Default schedules: nightly (backup daily 02:00, email Sunday 03:00)
+# Cron format: minute hour day-of-month month day-of-week (0-7 = Sun-Sat)
 DEFAULT_BACKUP_CRON="0 2 * * *"
 DEFAULT_EMAIL_CRON="0 3 * * 0"
 
-# Переопределение: из .env (BACKUP_CRON_SCHEDULE, BACKUP_EMAIL_CRON_SCHEDULE) или из аргументов
+# Override: from .env (BACKUP_CRON_SCHEDULE, BACKUP_EMAIL_CRON_SCHEDULE) or CLI args
 BACKUP_SCHEDULE="${1:-${BACKUP_CRON_SCHEDULE:-$DEFAULT_BACKUP_CRON}}"
 EMAIL_SCHEDULE="${2:-${BACKUP_EMAIL_CRON_SCHEDULE:-$DEFAULT_EMAIL_CRON}}"
 
@@ -28,22 +29,22 @@ MARKER="# --- Passbolt CE backup (dockers/pass) ---"
 BACKUP_LINE="$BACKUP_SCHEDULE cd $PROJECT_ROOT && ./scripts/backup.sh"
 EMAIL_LINE="$EMAIL_SCHEDULE cd $PROJECT_ROOT && ./scripts/send-backup-email.sh"
 
-echo "Будут добавлены/обновлены задачи cron:"
+echo "The following cron jobs will be added or updated:"
 echo ""
-echo "  backup.sh (ежедневно ночью):"
+echo "  backup.sh (daily schedule):"
 echo "    $BACKUP_LINE"
 echo ""
-echo "  send-backup-email.sh (раз в неделю ночью):"
+echo "  send-backup-email.sh (weekly schedule):"
 echo "    $EMAIL_LINE"
 echo ""
-echo "Текущее расписание: backup = $BACKUP_SCHEDULE, email = $EMAIL_SCHEDULE"
+echo "Current schedules: backup = $BACKUP_SCHEDULE, email = $EMAIL_SCHEDULE"
 echo ""
 
-# Проверка наличия скриптов
+# Ensure scripts exist
 [ -x "$PROJECT_ROOT/scripts/backup.sh" ] || { echo "Error: scripts/backup.sh not found or not executable"; exit 1; }
 [ -x "$PROJECT_ROOT/scripts/send-backup-email.sh" ] || { echo "Error: scripts/send-backup-email.sh not found or not executable"; exit 1; }
 
-# Удалить старые записи этого проекта из crontab
+# Remove old entries for this project from crontab
 current=$(crontab -l 2>/dev/null) || true
 > /tmp/crontab_pass_$$.tmp
 while IFS= read -r line || [ -n "$line" ]; do
@@ -55,7 +56,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     printf '%s\n' "$line" >> /tmp/crontab_pass_$$.tmp
 done <<< "$current"
 
-# Добавить новые записи
+# Append new entries
 {
     cat /tmp/crontab_pass_$$.tmp
     echo ""
@@ -65,10 +66,10 @@ done <<< "$current"
 } | crontab -
 rm -f /tmp/crontab_pass_$$.tmp
 
-echo "Готово. Текущий crontab:"
+echo "Done. Current crontab:"
 crontab -l
 echo ""
-echo "Другое расписание — аргументами или в .env:"
-echo "  ./scripts/install-cron.sh '0 2 * * *' '0 3 * * 0'   # backup 02:00 ежедневно, email 03:00 вс"
-echo "  ./scripts/install-cron.sh '0 3 * * *' '0 4 * * 1'   # backup 03:00 ежедневно, email 04:00 пн"
-echo "  В .env: BACKUP_CRON_SCHEDULE, BACKUP_EMAIL_CRON_SCHEDULE"
+echo "Custom schedules — pass as arguments or set in .env:"
+echo "  ./scripts/install-cron.sh '0 2 * * *' '0 3 * * 0'   # backup 02:00 daily, email 03:00 Sun"
+echo "  ./scripts/install-cron.sh '0 3 * * *' '0 4 * * 1'   # backup 03:00 daily, email 04:00 Mon"
+echo "  In .env: BACKUP_CRON_SCHEDULE, BACKUP_EMAIL_CRON_SCHEDULE"

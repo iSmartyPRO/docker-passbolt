@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Переход в корень проекта
+# Run from project root
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 cd "$PROJECT_ROOT"
@@ -11,17 +11,18 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 set -a
+# shellcheck disable=SC1091
 source .env
 set +a
 
-# Получатель — обязательно в .env
+# Recipient — required in .env
 BACKUP_EMAIL_TO="${BACKUP_EMAIL_TO:-}"
 if [ -z "$BACKUP_EMAIL_TO" ]; then
     echo "Error: BACKUP_EMAIL_TO is not set in .env (e.g. BACKUP_EMAIL_TO=admin@example.com)"
     exit 1
 fi
 
-# Путь к каталогу бэкапов
+# Backup directory
 BACKUP_DIR="${BACKUP_DIR:-$PROJECT_ROOT/backups}"
 if [ ! -d "$BACKUP_DIR" ]; then
     echo "Error: Backup directory not found: $BACKUP_DIR (run backup.sh first)"
@@ -35,10 +36,10 @@ fi
 
 BACKUP_FILE="$LATEST"
 BACKUP_NAME=$(basename "$BACKUP_FILE")
-# Дата модификации файла (Linux: stat, BSD/macOS: date -r)
+# File mtime (Linux: stat; BSD/macOS: date -r)
 BACKUP_DATE=$(stat -c '%y' "$BACKUP_FILE" 2>/dev/null | cut -c1-16 || date -r "$BACKUP_FILE" "+%Y-%m-%d %H:%M" 2>/dev/null || echo "")
 
-# Проверка переменных SMTP (те же, что для Passbolt)
+# SMTP variables (same as Passbolt)
 for var in EMAIL_TRANSPORT_DEFAULT_HOST EMAIL_DEFAULT_FROM; do
     if [ -z "${!var}" ]; then
         echo "Error: $var is not set in .env"
@@ -51,7 +52,7 @@ SMTP_PORT="${EMAIL_TRANSPORT_DEFAULT_PORT:-587}"
 SMTP_USER="${EMAIL_TRANSPORT_DEFAULT_USERNAME:-}"
 SMTP_PASS="${EMAIL_TRANSPORT_DEFAULT_PASSWORD:-}"
 USE_TLS="${EMAIL_TRANSPORT_DEFAULT_TLS:-true}"
-# Отключить проверку SSL (для самоподписанных сертификатов), как в Passbolt
+# Disable TLS verification (self-signed certs), aligned with Passbolt settings
 SSL_VERIFY="${PASSBOLT_PLUGINS_SMTP_SETTINGS_SECURITY_SSL_VERIFY_PEER:-true}"
 FROM_NAME="${EMAIL_DEFAULT_FROM_NAME:-Passbolt Backup}"
 FROM_ADDR="${EMAIL_DEFAULT_FROM}"
